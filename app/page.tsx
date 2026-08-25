@@ -319,6 +319,7 @@ export default function Home() {
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [ideaComposerOpen, setIdeaComposerOpen] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -396,6 +397,7 @@ export default function Home() {
   const updateData = (fn: (old: Data) => Data) => setData((old) => fn(old));
   const go = (next: typeof page) => {
     setPage(next);
+    setIdeaComposerOpen(false);
     if (next === "planner") setPlannerDate(today);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -415,6 +417,7 @@ export default function Home() {
       ideas: [idea, ...(d.ideas || [])],
     }));
     e.currentTarget.reset();
+    setIdeaComposerOpen(false);
     setNotice("Idea saved to your inbox.");
   }
   async function startVoiceRecording() {
@@ -454,6 +457,7 @@ export default function Home() {
             ideas: [idea, ...(d.ideas || [])],
           }));
           setNotice("Voice idea saved locally.");
+          setIdeaComposerOpen(false);
         } catch {
           setNotice("The recording could not be saved on this device.");
         } finally {
@@ -677,11 +681,6 @@ export default function Home() {
             <Icon>⚙</Icon>
             <span>Settings</span>
           </button>
-          <p>
-            Private by default
-            <br />
-            Saved on this device
-          </p>
         </div>
       </aside>
       <div className="mobile-nav">
@@ -1029,7 +1028,6 @@ export default function Home() {
     const inboxIdeas = (data.ideas || []).filter(
       (idea) => idea.status === "inbox",
     );
-    const recordedTime = `${String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:${String(recordingSeconds % 60).padStart(2, "0")}`;
     return (
       <>
         <header className="page-head home-heading">
@@ -1074,8 +1072,7 @@ export default function Home() {
             </div>
           </article>
           <article className="panel money-panel home-target-card">
-            <div className="panel-label">
-              <span>Money target</span>
+            <div className="panel-label panel-label-end">
               <button
                 className="text-button"
                 onClick={() => setModal("income")}
@@ -1162,9 +1159,7 @@ export default function Home() {
               </span>
               {latestAchievement ? (
                 <span className="achievement-preview">
-                  <small>Latest highlight</small>
                   <strong>{latestAchievement.achievement}</strong>
-                  <span>{latestAchievement.name}</span>
                 </span>
               ) : (
                 <span className="achievement-preview">
@@ -1179,85 +1174,24 @@ export default function Home() {
                   )}{" "}
                   milestones
                 </span>
-                <span>View all achievements</span>
               </span>
             </span>
           </button>
-          <article className="home-folder home-ideas-folder">
-            <div className="home-ideas-summary">
-              <span className="folder-topline">
-                <span className="folder-icon ideas-folder-icon">✦</span>
-                <span className="folder-count">
-                  {inboxIdeas.length} unscheduled
-                </span>
-              </span>
-              <span className="folder-heading">
-                <span>
-                  <small>Ideas inbox</small>
-                  <strong>Catch it now. Decide later.</strong>
-                </span>
-                <button
-                  className="folder-open"
-                  type="button"
-                  aria-label="Open Ideas inbox"
-                  onClick={() => go("ideas")}
-                >
-                  →
-                </button>
-              </span>
-              <span className="home-idea-preview-list">
-                {inboxIdeas.slice(0, 2).map((idea) => (
-                  <button
-                    type="button"
-                    key={idea.id}
-                    onClick={() => go("ideas")}
-                  >
-                    <span>{idea.audioId ? "Voice note" : idea.text}</span>
-                    <i aria-hidden="true">→</i>
-                  </button>
-                ))}
-                {!inboxIdeas.length && (
-                  <span className="home-idea-empty">
-                    A clear space for your next thought.
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="home-idea-capture">
+          <button
+            className="home-folder home-ideas-folder home-ideas-simple"
+            onClick={() => go("ideas")}
+          >
+            <span className="folder-topline">
+              <span className="folder-icon ideas-folder-icon">✦</span>
+              <span className="folder-count">{inboxIdeas.length}</span>
+            </span>
+            <span className="folder-heading">
               <span>
-                <small>Quick capture</small>
-                <strong>What&apos;s on your mind?</strong>
+                <strong>Ideas inbox</strong>
               </span>
-              <form onSubmit={saveIdea}>
-                <input
-                  aria-label="Quick idea from homepage"
-                  name="idea"
-                  placeholder="Type an idea…"
-                  autoComplete="off"
-                />
-                <button className="button primary" type="submit">
-                  Save
-                </button>
-              </form>
-              <button
-                className={`home-voice-button ${recording ? "recording" : ""}`}
-                type="button"
-                onClick={recording ? stopVoiceRecording : startVoiceRecording}
-              >
-                <span aria-hidden="true">{recording ? "■" : "●"}</span>
-                {recording
-                  ? `Stop & save · ${recordedTime}`
-                  : "Record a voice idea"}
-              </button>
-              <button
-                className="home-ideas-link"
-                type="button"
-                onClick={() => go("ideas")}
-              >
-                Open the full inbox
-              </button>
-            </div>
-          </article>
+              <b aria-hidden="true">→</b>
+            </span>
+          </button>
         </section>
       </>
     );
@@ -1362,71 +1296,89 @@ export default function Home() {
         hour: "2-digit",
         minute: "2-digit",
       }).format(new Date(value));
+
+    if (ideaComposerOpen) {
+      return (
+        <section className="idea-composer-page">
+          <button
+            className="idea-composer-back"
+            onClick={() => setIdeaComposerOpen(false)}
+          >
+            ← Ideas
+          </button>
+          <header className="idea-composer-head">
+            <h1>New idea</h1>
+          </header>
+          <article className="panel idea-composer-card">
+            <form onSubmit={saveIdea}>
+              <textarea
+                name="idea"
+                aria-label="New idea"
+                placeholder="Write your idea…"
+                autoFocus
+                required
+              />
+              <button className="button primary">Save idea</button>
+            </form>
+            <div className="idea-composer-divider">
+              <span>or</span>
+            </div>
+            <div className={`idea-voice-action${recording ? " recording" : ""}`}>
+              <div className="voice-orb" aria-hidden="true">
+                <span />
+                <i />
+              </div>
+              <strong>{recording ? recordedTime : "Record with your voice"}</strong>
+              <button
+                className={`button ${recording ? "stop-button" : "quiet"}`}
+                onClick={recording ? stopVoiceRecording : startVoiceRecording}
+              >
+                {recording ? (
+                  <>
+                    <span className="stop-square" /> Stop &amp; save
+                  </>
+                ) : (
+                  <>
+                    <span className="record-dot" /> Start recording
+                  </>
+                )}
+              </button>
+            </div>
+          </article>
+        </section>
+      );
+    }
+
     return (
       <>
         <header className="page-head ideas-head">
           <div>
-            <p className="eyebrow">Capture now · decide later</p>
-            <h1>Ideas inbox.</h1>
+            <h1>Ideas</h1>
           </div>
           <button className="button quiet" onClick={() => go("planner")}>
             ← Back to planner
           </button>
         </header>
-        <section className="idea-capture-grid">
-          <article className="panel idea-capture-card">
-            <div>
-              <span className="idea-capture-icon">✦</span>
-              <div>
-                <p className="eyebrow">Quick thought</p>
-                <h2>Type it before it disappears.</h2>
-              </div>
-            </div>
-            <form onSubmit={saveIdea}>
-              <textarea
-                name="idea"
-                aria-label="New idea"
-                placeholder="Write an idea, reminder, opportunity, or task…"
-                required
-              />
-              <button className="button primary">Save idea</button>
-            </form>
-            <small>No date, time, or category needed.</small>
-          </article>
-          <article
-            className={`panel voice-capture-card${recording ? " recording" : ""}`}
-          >
-            <div className="voice-orb">
-              <span />
-              <i />
-            </div>
-            <p className="eyebrow">Voice note</p>
-            <h2>{recording ? "Listening…" : "Talk the idea out."}</h2>
-            <strong>{recordedTime}</strong>
-            <button
-              className={`button ${recording ? "stop-button" : "quiet"}`}
-              onClick={recording ? stopVoiceRecording : startVoiceRecording}
-            >
-              {recording ? (
-                <>
-                  <span className="stop-square" /> Stop &amp; save
-                </>
-              ) : (
-                <>
-                  <span className="record-dot" /> Record idea
-                </>
-              )}
-            </button>
-            <small>Stored only on this device · 2 minute maximum</small>
-          </article>
-        </section>
+        <button
+          className="panel new-idea-card"
+          onClick={() => setIdeaComposerOpen(true)}
+        >
+          <span className="new-idea-plus" aria-hidden="true">+</span>
+          <span className="new-idea-label">
+            <strong>Create new idea</strong>
+            <small>Type or record</small>
+          </span>
+          <span className="new-idea-mic" aria-hidden="true">
+            <span />
+            <i />
+          </span>
+        </button>
         <section className="ideas-section">
           <div className="ideas-section-head">
             <div>
-              <p className="eyebrow">Waiting for you</p>
-              <h2>Idea inbox</h2>
+              <h2>Your ideas</h2>
             </div>
-            <span>{inboxIdeas.length} unscheduled</span>
+            <span>{inboxIdeas.length}</span>
           </div>
           {inboxIdeas.length ? (
             <div className="idea-board">
@@ -1632,9 +1584,6 @@ export default function Home() {
       <>
         <header className="page-head">
           <div>
-            <p className="eyebrow">
-              {archived ? "History, not clutter" : "Your working bets"}
-            </p>
             <h1>{archived ? "Archive" : "Experiments"}</h1>
           </div>
           <div className="header-actions experiment-actions">
@@ -1642,7 +1591,7 @@ export default function Home() {
               className="button quiet"
               onClick={() => go(archived ? "experiments" : "archive")}
             >
-              {archived ? "← Experiments" : "Archive"}
+              {archived ? "← Back" : "Archive"}
             </button>
             {!archived && (
               <button
@@ -1652,7 +1601,7 @@ export default function Home() {
                   setModal("experiment");
                 }}
               >
-                + Add experiment
+                + New
               </button>
             )}
           </div>
@@ -1665,51 +1614,57 @@ export default function Home() {
                   <div>
                     <span className="category">{exp.category}</span>
                     <h2>{exp.name}</h2>
-                    <p>
-                      Started {prettyDate(exp.startDate)} · {exp.hours} hours
-                      invested
-                    </p>
                   </div>
-                  <button
-                    className="button quiet"
-                    onClick={() => {
-                      setEditingExperiment(exp);
-                      setModal("experiment");
-                    }}
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="experiment-progress">
-                  <Progress value={exp.progress} />
-                  <strong>{exp.progress}%</strong>
-                </div>
-                <div className="experiment-details">
-                  <div>
-                    <small>Milestones</small>
-                    <b>{exp.milestones} reached</b>
-                  </div>
-                  {exp.target && (
-                    <div>
-                      <small>Money target</small>
-                      <b>{money(exp.target)}</b>
+                  <div className="experiment-top-actions">
+                    <div
+                      className="experiment-progress-ring"
+                      role="progressbar"
+                      aria-label={`${exp.name} progress`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={exp.progress}
+                      style={{
+                        background: `conic-gradient(var(--sage-bright) 0 ${exp.progress}%, rgba(235, 239, 229, 0.09) ${exp.progress}% 100%)`,
+                      }}
+                    >
+                      <span>
+                        <strong>{exp.progress}%</strong>
+                        <small>progress</small>
+                      </span>
                     </div>
+                    <button
+                      className="experiment-edit-button"
+                      aria-label={`Edit ${exp.name}`}
+                      title="Edit"
+                      onClick={() => {
+                        setEditingExperiment(exp);
+                        setModal("experiment");
+                      }}
+                    >
+                      <span aria-hidden="true">✎</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="experiment-stats">
+                  <span><b>{exp.milestones}</b> milestones</span>
+                  {exp.target && (
+                    <span><b>{money(exp.target)}</b> target</span>
                   )}
-                  <div>
-                    <small>Status</small>
-                    <b className={`status-text ${exp.status}`}>{exp.status}</b>
-                  </div>
+                  <span><b>{exp.hours}</b>h</span>
+                  {archived && (
+                    <span className={`status-text ${exp.status}`}>{exp.status}</span>
+                  )}
                 </div>
-                <div className="notes-grid">
-                  <div>
-                    <small>Results</small>
-                    <p>{exp.achievement || "No results recorded yet."}</p>
+                {(exp.achievement || exp.lessons) && (
+                  <div className="experiment-notes">
+                    {exp.achievement && (
+                      <p><b aria-hidden="true">✓</b>{exp.achievement}</p>
+                    )}
+                    {exp.lessons && (
+                      <p><b aria-hidden="true">↗</b>{exp.lessons}</p>
+                    )}
                   </div>
-                  <div>
-                    <small>Lesson</small>
-                    <p>{exp.lessons || "No lesson recorded yet."}</p>
-                  </div>
-                </div>
+                )}
               </article>
             ))}
           </section>
@@ -1718,14 +1673,14 @@ export default function Home() {
             <Empty
               icon="◌"
               title={
-                archived ? "Nothing archived yet" : "Start with one useful bet"
+                archived ? "Archive is empty" : "No experiments"
               }
               copy={
                 archived
-                  ? "Paused and completed experiments will live here with their lessons intact."
-                  : "An experiment can be a role search, client work, a side hustle, or anything you are testing."
+                  ? "Paused or completed experiments appear here."
+                  : "Add one to begin."
               }
-              action={archived ? undefined : "Add experiment"}
+              action={archived ? undefined : "+ New"}
               onClick={() => {
                 setEditingExperiment(null);
                 setModal("experiment");
@@ -1866,6 +1821,20 @@ export default function Home() {
     const exp = experimentFor(block.experimentId);
     const isThisTimer = timerBlock?.id === block.id;
     const canTrack = block.status === "planned" || block.status === "active";
+    const plannedMinutes = minutes(block.start, block.end);
+    const elapsedSeconds = isThisTimer
+      ? timerSeconds
+      : (block.actualMinutes || 0) * 60;
+    const sessionProgress = Math.min(
+      100,
+      Math.round((elapsedSeconds / Math.max(1, plannedMinutes * 60)) * 100),
+    );
+    const compactElapsed =
+      elapsedSeconds < 60
+        ? `${elapsedSeconds}s`
+        : elapsedSeconds < 3600
+          ? `${Math.floor(elapsedSeconds / 60)} min`
+          : `${Math.floor(elapsedSeconds / 3600)}h ${Math.floor((elapsedSeconds % 3600) / 60)}m`;
     const statusLabel =
       block.status === "completed"
         ? "Completed"
@@ -1886,7 +1855,7 @@ export default function Home() {
             onClick={() => setFocusBlock(null)}
             aria-label="Back to planner"
           >
-            <StaticIcon name="chevron-left" size={16} />
+            <StaticIcon name="chevron-left" size={18} />
             Back to plan
           </button>
           <span
@@ -1904,34 +1873,35 @@ export default function Home() {
               <p>{exp?.name || "Personal"}</p>
             </div>
             <div className="focus-meta">
-              <span>
-                <small>Planned time</small>
+              <span className="focus-meta-plain" aria-label="Planned time">
                 <strong>
                   {block.start} – {block.end}
                 </strong>
               </span>
-              <span>
-                <small>Planned length</small>
-                <strong>{minutes(block.start, block.end)} min</strong>
+              <span className="focus-meta-plain" aria-label="Planned length">
+                <strong>{plannedMinutes} min</strong>
               </span>
               <span>
                 <small>Status</small>
                 <strong>{statusLabel}</strong>
               </span>
             </div>
-            <div className="focus-clock" aria-live="polite">
-              <small>
-                {timerRunning && isThisTimer ? "Time in focus" : "Session time"}
-              </small>
-              <strong>
-                {isThisTimer
-                  ? formatTime(timerSeconds)
-                  : formatTime((block.actualMinutes || 0) * 60)}
-              </strong>
+            <div className="focus-progress" aria-live="polite">
+              <div className="focus-progress-copy">
+                <span>{timerRunning && isThisTimer ? "In focus" : "Focused time"}</span>
+                <strong>{compactElapsed}</strong>
+              </div>
               <div
-                className={`focus-pulse-line ${timerRunning && isThisTimer ? "moving" : ""}`}
+                className={`focus-progress-track${timerRunning && isThisTimer ? " moving" : ""}`}
+                role="progressbar"
+                aria-label="Session progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={sessionProgress}
               >
-                <span />
+                <span style={{ width: `${sessionProgress}%` }}>
+                  <i />
+                </span>
               </div>
             </div>
             <div className="focus-controls">
@@ -1974,6 +1944,7 @@ export default function Home() {
                   setEditingBlock(block);
                 }}
               >
+                <span className="focus-edit-icon" aria-hidden="true">✎</span>
                 Edit task details
               </button>
             </div>
