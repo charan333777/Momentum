@@ -254,8 +254,8 @@ const StaticIcon = ({ name, size = 17 }: { name: string; size?: number }) => (
     style={{
       width: size,
       height: size,
-      maskImage: `url(/icons/${name}.svg)`,
-      WebkitMaskImage: `url(/icons/${name}.svg)`,
+      maskImage: `url(./icons/${name}.svg)`,
+      WebkitMaskImage: `url(./icons/${name}.svg)`,
     }}
   />
 );
@@ -880,7 +880,10 @@ export default function Home() {
           </div>
         </header>
         <section className="hero">
-          <img src="/momentum-hero.png" alt="A quiet early-morning workspace" />
+          <img
+            src="./momentum-hero.png"
+            alt="A quiet early-morning workspace"
+          />
           <div className="hero-shade" />
           <div className="hero-content">
             <p className="eyebrow">Nine-month stability sprint</p>
