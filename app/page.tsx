@@ -1169,10 +1169,6 @@ export default function Home() {
                   : "Your planned day"}
               </h2>
             </div>
-            <p>
-              Tap a task to open focus mode. Planned and actual time stay
-              separate.
-            </p>
           </div>
           {blocks.length ? (
             <Timeline
