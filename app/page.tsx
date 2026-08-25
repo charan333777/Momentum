@@ -1026,6 +1026,10 @@ export default function Home() {
       (block) => block.status === "completed",
     ).length;
     const latestAchievement = achievements[0];
+    const inboxIdeas = (data.ideas || []).filter(
+      (idea) => idea.status === "inbox",
+    );
+    const recordedTime = `${String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:${String(recordingSeconds % 60).padStart(2, "0")}`;
     return (
       <>
         <header className="page-head home-heading">
@@ -1179,6 +1183,81 @@ export default function Home() {
               </span>
             </span>
           </button>
+          <article className="home-folder home-ideas-folder">
+            <div className="home-ideas-summary">
+              <span className="folder-topline">
+                <span className="folder-icon ideas-folder-icon">✦</span>
+                <span className="folder-count">
+                  {inboxIdeas.length} unscheduled
+                </span>
+              </span>
+              <span className="folder-heading">
+                <span>
+                  <small>Ideas inbox</small>
+                  <strong>Catch it now. Decide later.</strong>
+                </span>
+                <button
+                  className="folder-open"
+                  type="button"
+                  aria-label="Open Ideas inbox"
+                  onClick={() => go("ideas")}
+                >
+                  →
+                </button>
+              </span>
+              <span className="home-idea-preview-list">
+                {inboxIdeas.slice(0, 2).map((idea) => (
+                  <button
+                    type="button"
+                    key={idea.id}
+                    onClick={() => go("ideas")}
+                  >
+                    <span>{idea.audioId ? "Voice note" : idea.text}</span>
+                    <i aria-hidden="true">→</i>
+                  </button>
+                ))}
+                {!inboxIdeas.length && (
+                  <span className="home-idea-empty">
+                    A clear space for your next thought.
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="home-idea-capture">
+              <span>
+                <small>Quick capture</small>
+                <strong>What&apos;s on your mind?</strong>
+              </span>
+              <form onSubmit={saveIdea}>
+                <input
+                  aria-label="Quick idea from homepage"
+                  name="idea"
+                  placeholder="Type an idea…"
+                  autoComplete="off"
+                />
+                <button className="button primary" type="submit">
+                  Save
+                </button>
+              </form>
+              <button
+                className={`home-voice-button ${recording ? "recording" : ""}`}
+                type="button"
+                onClick={recording ? stopVoiceRecording : startVoiceRecording}
+              >
+                <span aria-hidden="true">{recording ? "■" : "●"}</span>
+                {recording
+                  ? `Stop & save · ${recordedTime}`
+                  : "Record a voice idea"}
+              </button>
+              <button
+                className="home-ideas-link"
+                type="button"
+                onClick={() => go("ideas")}
+              >
+                Open the full inbox
+              </button>
+            </div>
+          </article>
         </section>
       </>
     );

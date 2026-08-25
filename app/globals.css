@@ -661,6 +661,163 @@ nav {
   color: var(--muted);
   font-size: 12px;
 }
+.home-ideas-folder {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+  gap: 34px;
+  min-height: 265px;
+  padding: 29px;
+  background:
+    radial-gradient(
+      circle at 80% 15%,
+      rgba(156, 197, 174, 0.09),
+      transparent 34%
+    ),
+    linear-gradient(145deg, #202a26, #181f1c);
+}
+.home-ideas-folder:before {
+  background: var(--sage-bright);
+}
+.home-ideas-summary {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.ideas-folder-icon {
+  font-size: 18px;
+}
+.folder-open {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sage);
+  color: #17201d;
+  font-size: 19px;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+.folder-open:hover {
+  transform: translateX(3px);
+  background: var(--sage-bright);
+}
+.home-idea-preview-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+.home-idea-preview-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 15px;
+  min-height: 42px;
+  border: 1px solid rgba(235, 239, 229, 0.08);
+  border-radius: 11px;
+  padding: 0 13px;
+  background: rgba(10, 14, 12, 0.18);
+  color: #d7ddd8;
+  font-size: 12px;
+  text-align: left;
+}
+.home-idea-preview-list button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-idea-preview-list button i {
+  color: var(--sage);
+  font-style: normal;
+}
+.home-idea-empty {
+  padding: 15px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.home-idea-capture {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  border-left: 1px solid var(--line);
+  padding-left: 34px;
+}
+.home-idea-capture > span:first-child {
+  display: grid;
+  gap: 5px;
+}
+.home-idea-capture small {
+  color: var(--sage);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.home-idea-capture strong {
+  font-size: 19px;
+  font-weight: 600;
+}
+.home-idea-capture form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  margin-top: 17px;
+}
+.home-idea-capture input {
+  min-width: 0;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 0 14px;
+  outline: 0;
+  background: rgba(12, 17, 15, 0.64);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.home-idea-capture input:focus {
+  border-color: rgba(156, 197, 174, 0.52);
+  box-shadow: 0 0 0 3px rgba(156, 197, 174, 0.08);
+}
+.home-voice-button,
+.home-ideas-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+.home-voice-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.home-voice-button span {
+  color: var(--amber);
+  font-size: 9px;
+}
+.home-voice-button.recording {
+  color: #e6d7ba;
+}
+.home-voice-button.recording span {
+  animation: voicePulse 1.4s ease-in-out infinite;
+}
+.home-ideas-link {
+  width: max-content;
+  margin-top: 14px;
+  color: var(--sage-bright);
+  font-size: 12px;
+  font-weight: 700;
+}
 .achievement-hero {
   position: relative;
   min-height: 280px;
@@ -2956,6 +3113,16 @@ nav {
   .mobile-tabs small {
     font-size: 11px;
   }
+  .home-ideas-folder {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+  .home-idea-capture {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    padding-top: 26px;
+    padding-left: 0;
+  }
   .idea-capture-grid {
     grid-template-columns: 1fr;
   }
@@ -2967,6 +3134,22 @@ nav {
   }
 }
 @media (max-width: 580px) {
+  .home-ideas-folder {
+    min-height: 0;
+  }
+  .home-ideas-folder .folder-heading strong {
+    max-width: 230px;
+  }
+  .home-idea-capture form {
+    grid-template-columns: 1fr;
+  }
+  .home-idea-capture form .button {
+    width: 100%;
+  }
+  .home-voice-button,
+  .home-ideas-link {
+    min-height: 34px;
+  }
   .ideas-head {
     flex-wrap: wrap;
   }
