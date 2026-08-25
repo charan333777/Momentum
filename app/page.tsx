@@ -283,6 +283,8 @@ export default function Home() {
   );
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [timerBlock, setTimerBlock] = useState<Block | null>(null);
+  const [focusBlock, setFocusBlock] = useState<Block | null>(null);
+  const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [notice, setNotice] = useState("");
   useEffect(() => {
@@ -297,10 +299,10 @@ export default function Home() {
     if (hydrated) localStorage.setItem("momentum-v1", JSON.stringify(data));
   }, [data, hydrated]);
   useEffect(() => {
-    if (!timerBlock) return;
+    if (!timerBlock || !timerRunning) return;
     const id = window.setInterval(() => setTimerSeconds((s) => s + 1), 1000);
     return () => clearInterval(id);
-  }, [timerBlock]);
+  }, [timerBlock, timerRunning]);
   useEffect(() => {
     if (!notice) return;
     const id = window.setTimeout(() => setNotice(""), 2600);
@@ -350,7 +352,9 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   function beginTimer(block: Block) {
+    setFocusBlock(block);
     setTimerBlock(block);
+    setTimerRunning(true);
     setTimerSeconds(block.actualMinutes ? block.actualMinutes * 60 : 0);
     updateData((d) => ({
       ...d,
@@ -358,6 +362,10 @@ export default function Home() {
         b.id === block.id ? { ...b, status: "active" } : b,
       ),
     }));
+  }
+  function stopTimer() {
+    setTimerRunning(false);
+    setModal("checkin");
   }
   function finishCheckin(status: Status, note: string) {
     if (!timerBlock) return;
@@ -375,7 +383,9 @@ export default function Home() {
           : e,
       ),
     }));
+    setTimerRunning(false);
     setTimerBlock(null);
+    setFocusBlock(null);
     setTimerSeconds(0);
     setModal(null);
     setNotice("Progress saved. Keep the day simple.");
@@ -538,6 +548,14 @@ export default function Home() {
         {page === "archive" && <Experiments archived />}
         {page === "week" && <Weekly />}
       </section>
+      {focusBlock && (
+        <FocusSession
+          block={
+            data.blocks.find((block) => block.id === focusBlock.id) ||
+            focusBlock
+          }
+        />
+      )}
       <div className="mobile-tabs">
         {mobileNav.map(([id, icon, label]) => (
           <button
@@ -550,19 +568,22 @@ export default function Home() {
           </button>
         ))}
       </div>
-      {timerBlock && (
+      {timerBlock && !focusBlock && (
         <div className="timer-dock">
-          <span className="pulse" />
+          <span className={timerRunning ? "pulse" : "pulse paused"} />
           <div>
-            <small>Now focused on</small>
+            <small>{timerRunning ? "Now focused on" : "Session paused"}</small>
             <strong>{timerBlock.title}</strong>
           </div>
           <b>{formatTime(timerSeconds)}</b>
           <button
             className="button primary"
-            onClick={() => setModal("checkin")}
+            onClick={() => {
+              setFocusBlock(timerBlock);
+              if (!timerRunning) setTimerRunning(true);
+            }}
           >
-            Finish
+            {timerRunning ? "Open" : "Resume"}
           </button>
         </div>
       )}
@@ -929,10 +950,18 @@ export default function Home() {
                 </p>
                 <button
                   className="button primary full-mobile"
-                  onClick={() => beginTimer(currentBlock)}
+                  onClick={() => {
+                    if (timerBlock?.id === currentBlock.id) {
+                      setFocusBlock(currentBlock);
+                    } else {
+                      beginTimer(currentBlock);
+                    }
+                  }}
                 >
                   {timerBlock?.id === currentBlock.id
-                    ? "Timer in progress"
+                    ? timerRunning
+                      ? "Open focus session"
+                      : "Resume focus session"
                     : "Start current block"}{" "}
                   <span>→</span>
                 </button>
@@ -966,6 +995,7 @@ export default function Home() {
                 setPlannerDate(today);
                 setEditingBlock(b);
               }}
+              onOpen={setFocusBlock}
               onStart={beginTimer}
             />
           </article>
@@ -1096,14 +1126,15 @@ export default function Home() {
               </h2>
             </div>
             <p>
-              Tap a block to edit it. Completing a timer saves actual time
-              separately.
+              Tap a task to open focus mode. Planned and actual time stay
+              separate.
             </p>
           </div>
           {blocks.length ? (
             <Timeline
               blocks={blocks}
               onEdit={(b) => setEditingBlock(b)}
+              onOpen={setFocusBlock}
               onStart={beginTimer}
             />
           ) : (
@@ -1364,67 +1395,208 @@ export default function Home() {
       </>
     );
   }
+  function FocusSession({ block }: { block: Block }) {
+    const exp = experimentFor(block.experimentId);
+    const isThisTimer = timerBlock?.id === block.id;
+    const canTrack = block.status === "planned" || block.status === "active";
+    const statusLabel =
+      block.status === "completed"
+        ? "Completed"
+        : block.status === "partial"
+          ? "Partly completed"
+          : block.status === "changed"
+            ? "Changed task"
+            : block.status === "skipped"
+              ? "Skipped"
+              : block.status === "active"
+                ? "In progress"
+                : "Ready to begin";
+    return (
+      <section className="focus-session-page" aria-label="Focus session">
+        <header className="focus-session-head">
+          <button
+            className="focus-back"
+            onClick={() => setFocusBlock(null)}
+            aria-label="Back to planner"
+          >
+            <StaticIcon name="chevron-left" size={16} />
+            Back to plan
+          </button>
+          <span
+            className={`focus-state ${timerRunning && isThisTimer ? "live" : ""}`}
+          >
+            <i />
+            {timerRunning && isThisTimer ? "Focus session live" : statusLabel}
+          </span>
+        </header>
+        <div className="focus-session-wrap">
+          <article className="focus-session-card">
+            <div className="focus-task-copy">
+              <p className="eyebrow">{exp?.category || "Personal focus"}</p>
+              <h1>{block.title}</h1>
+              <p>{exp?.name || "Personal"}</p>
+            </div>
+            <div className="focus-meta">
+              <span>
+                <small>Planned time</small>
+                <strong>
+                  {block.start} – {block.end}
+                </strong>
+              </span>
+              <span>
+                <small>Planned length</small>
+                <strong>{minutes(block.start, block.end)} min</strong>
+              </span>
+              <span>
+                <small>Status</small>
+                <strong>{statusLabel}</strong>
+              </span>
+            </div>
+            <div className="focus-clock" aria-live="polite">
+              <small>
+                {timerRunning && isThisTimer ? "Time in focus" : "Session time"}
+              </small>
+              <strong>
+                {isThisTimer
+                  ? formatTime(timerSeconds)
+                  : formatTime((block.actualMinutes || 0) * 60)}
+              </strong>
+              <div
+                className={`focus-pulse-line ${timerRunning && isThisTimer ? "moving" : ""}`}
+              >
+                <span />
+              </div>
+            </div>
+            <div className="focus-controls">
+              {canTrack && !isThisTimer && (
+                <button
+                  className="button primary focus-primary"
+                  onClick={() => beginTimer(block)}
+                >
+                  <StaticIcon name="play" size={14} /> Start session
+                </button>
+              )}
+              {isThisTimer && timerRunning && (
+                <button
+                  className="button stop-button focus-primary"
+                  onClick={stopTimer}
+                >
+                  <span className="stop-square" /> Stop &amp; check in
+                </button>
+              )}
+              {isThisTimer && !timerRunning && (
+                <>
+                  <button
+                    className="button primary focus-primary"
+                    onClick={() => setTimerRunning(true)}
+                  >
+                    <StaticIcon name="play" size={14} /> Resume session
+                  </button>
+                  <button
+                    className="button quiet"
+                    onClick={() => setModal("checkin")}
+                  >
+                    End &amp; check in
+                  </button>
+                </>
+              )}
+              <button
+                className="text-button focus-edit"
+                onClick={() => {
+                  setPlannerDate(block.date);
+                  setEditingBlock(block);
+                }}
+              >
+                Edit task details
+              </button>
+            </div>
+            {block.note && <p className="focus-note">“{block.note}”</p>}
+          </article>
+        </div>
+      </section>
+    );
+  }
   function Timeline({
     blocks,
     compact = false,
     onEdit,
+    onOpen,
     onStart,
   }: {
     blocks: Block[];
     compact?: boolean;
     onEdit: (b: Block) => void;
+    onOpen: (b: Block) => void;
     onStart: (b: Block) => void;
   }) {
     return (
-      <div className={compact ? "timeline compact" : "timeline"}>
+      <div className={compact ? "task-stack compact" : "task-stack"}>
         {blocks.map((b) => {
           const exp = experimentFor(b.experimentId);
           const overdue = isBlockOverdue(b, today);
           return (
-            <div className="time-row" key={b.id}>
-              <time>{b.start}</time>
-              <div
-                className={`timeline-block ${b.status}${overdue ? " overdue" : ""}`}
-              >
-                <button className="block-main" onClick={() => onEdit(b)}>
-                  <span className="block-title">{b.title}</span>
-                  <small>
-                    {b.end} · {exp?.name || "Personal"}
-                    {b.note ? ` · ${b.note}` : ""}
-                  </small>
+            <article
+              className={`task-card ${b.status}${overdue ? " overdue" : ""}`}
+              key={b.id}
+            >
+              <button className="task-card-main" onClick={() => onOpen(b)}>
+                <span className="task-time">
+                  <strong>{b.start}</strong>
+                  <i />
+                  <span>{b.end}</span>
+                </span>
+                <span className="task-copy">
+                  <small>{exp?.category || "Personal focus"}</small>
+                  <strong>{b.title}</strong>
+                  <span>
+                    {exp?.name || "Personal"} · {minutes(b.start, b.end)} min
+                  </span>
+                </span>
+              </button>
+              <div className="task-card-end">
+                <span className={`block-status ${b.status}`}>
+                  {overdue
+                    ? "Overdue"
+                    : b.status === "completed"
+                      ? "Done"
+                      : b.status === "partial"
+                        ? "Partly"
+                        : b.status === "changed"
+                          ? "Changed"
+                          : b.status === "skipped"
+                            ? "Skipped"
+                            : b.status === "active"
+                              ? "In progress"
+                              : "Planned"}
+                </span>
+                <button
+                  className="task-edit"
+                  onClick={() => onEdit(b)}
+                  aria-label={`Edit ${b.title}`}
+                >
+                  Edit
                 </button>
-                <div className="block-end">
-                  {b.status === "planned" || b.status === "active" ? (
-                    <>
-                      {overdue && (
-                        <span className="overdue-label">Overdue</span>
-                      )}
-                      <button
-                        className="play-button"
-                        onClick={() => onStart(b)}
-                        aria-label={`Start ${b.title}`}
-                      >
-                        {timerBlock?.id === b.id ? (
-                          <span className="timer-indicator" />
-                        ) : (
-                          <StaticIcon name="play" size={12} />
-                        )}
-                      </button>
-                    </>
-                  ) : (
-                    <span className={`block-status ${b.status}`}>
-                      {b.status === "completed"
-                        ? "Done"
-                        : b.status === "partial"
-                          ? "Partly"
-                          : b.status === "changed"
-                            ? "Changed"
-                            : "Skipped"}
-                    </span>
-                  )}
-                </div>
+                {b.status === "planned" || b.status === "active" ? (
+                  <button
+                    className="play-button"
+                    onClick={() =>
+                      timerBlock?.id === b.id ? onOpen(b) : onStart(b)
+                    }
+                    aria-label={
+                      timerBlock?.id === b.id
+                        ? `Open ${b.title} focus session`
+                        : `Start ${b.title}`
+                    }
+                  >
+                    {timerBlock?.id === b.id ? (
+                      <span className="timer-indicator" />
+                    ) : (
+                      <StaticIcon name="play" size={12} />
+                    )}
+                  </button>
+                ) : null}
               </div>
-            </div>
+            </article>
           );
         })}
       </div>
@@ -1437,8 +1609,6 @@ export default function Home() {
         title="How did it go?"
         onClose={() => {
           setModal(null);
-          setTimerBlock(null);
-          setTimerSeconds(0);
         }}
       >
         <p className="checkin-copy">
