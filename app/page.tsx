@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { deleteAudioBlob, getAudioBlob, saveAudioBlob } from "./audio-store";
 
 type Status =
   | "planned"
@@ -35,6 +36,14 @@ type Block = {
   actualMinutes?: number;
 };
 type Income = { id: string; date: string; amount: number; source: string };
+type Idea = {
+  id: string;
+  text: string;
+  createdAt: string;
+  status: "inbox" | "planned";
+  audioId?: string;
+  plannedDate?: string;
+};
 type Data = {
   endDate: string;
   incomeTarget: number;
@@ -42,6 +51,7 @@ type Data = {
   experiments: Experiment[];
   blocks: Block[];
   income: Income[];
+  ideas?: Idea[];
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -236,6 +246,20 @@ function demoData(): Data {
       { id: "i2", date: day(-7), amount: 250, source: "Research sprint" },
       { id: "i3", date: day(-1), amount: 150, source: "Advisory call" },
     ],
+    ideas: [
+      {
+        id: "idea-1",
+        text: "Create a one-page freelance offer for small teams",
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+        status: "inbox",
+      },
+      {
+        id: "idea-2",
+        text: "Collect three stronger portfolio outcome screenshots",
+        createdAt: new Date().toISOString(),
+        status: "inbox",
+      },
+    ],
   };
 }
 
@@ -274,6 +298,7 @@ export default function Home() {
   const [page, setPage] = useState<
     | "dashboard"
     | "planner"
+    | "ideas"
     | "achievements"
     | "experiments"
     | "archive"
@@ -287,16 +312,26 @@ export default function Home() {
     null,
   );
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const [planningIdeaId, setPlanningIdeaId] = useState<string | null>(null);
   const [timerBlock, setTimerBlock] = useState<Block | null>(null);
   const [focusBlock, setFocusBlock] = useState<Block | null>(null);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
   const [notice, setNotice] = useState("");
   useEffect(() => {
     const saved = localStorage.getItem("momentum-v1");
     if (saved)
       try {
-        setData(JSON.parse(saved));
+        const parsed = JSON.parse(saved) as Data;
+        setData({
+          ...parsed,
+          ideas: parsed.ideas || demoData().ideas,
+        });
       } catch {}
     setHydrated(true);
   }, []);
@@ -308,6 +343,20 @@ export default function Home() {
     const id = window.setInterval(() => setTimerSeconds((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [timerBlock, timerRunning]);
+  useEffect(() => {
+    if (!recording) return;
+    const id = window.setInterval(
+      () => setRecordingSeconds((seconds) => seconds + 1),
+      1000,
+    );
+    return () => clearInterval(id);
+  }, [recording]);
+  useEffect(() => {
+    if (recordingSeconds < 120) return;
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
+  }, [recordingSeconds]);
   useEffect(() => {
     if (!notice) return;
     const id = window.setTimeout(() => setNotice(""), 2600);
@@ -350,6 +399,105 @@ export default function Home() {
     if (next === "planner") setPlannerDate(today);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  function saveIdea(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const text = String(form.get("idea") || "").trim();
+    if (!text) return;
+    const idea: Idea = {
+      id: uid(),
+      text,
+      createdAt: new Date().toISOString(),
+      status: "inbox",
+    };
+    updateData((d) => ({
+      ...d,
+      ideas: [idea, ...(d.ideas || [])],
+    }));
+    e.currentTarget.reset();
+    setNotice("Idea saved to your inbox.");
+  }
+  async function startVoiceRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      setNotice("Audio recording is not supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredType = "audio/webm;codecs=opus";
+      const recorder = MediaRecorder.isTypeSupported(preferredType)
+        ? new MediaRecorder(stream, { mimeType: preferredType })
+        : new MediaRecorder(stream);
+      recordingStreamRef.current = stream;
+      recordingChunksRef.current = [];
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        const audioId = uid();
+        const blob = new Blob(recordingChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        try {
+          if (!blob.size) throw new Error("Empty recording");
+          await saveAudioBlob(audioId, blob);
+          const idea: Idea = {
+            id: uid(),
+            text: "Voice idea",
+            createdAt: new Date().toISOString(),
+            status: "inbox",
+            audioId,
+          };
+          updateData((d) => ({
+            ...d,
+            ideas: [idea, ...(d.ideas || [])],
+          }));
+          setNotice("Voice idea saved locally.");
+        } catch {
+          setNotice("The recording could not be saved on this device.");
+        } finally {
+          recordingStreamRef.current
+            ?.getTracks()
+            .forEach((track) => track.stop());
+          recordingStreamRef.current = null;
+          recorderRef.current = null;
+          recordingChunksRef.current = [];
+          setRecording(false);
+          setRecordingSeconds(0);
+        }
+      };
+      recorder.start();
+      setRecordingSeconds(0);
+      setRecording(true);
+    } catch {
+      setNotice("Microphone permission is needed to record an idea.");
+    }
+  }
+  function stopVoiceRecording() {
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
+  }
+  function removeIdea(idea: Idea) {
+    updateData((d) => ({
+      ...d,
+      ideas: (d.ideas || []).filter((item) => item.id !== idea.id),
+    }));
+    if (idea.audioId) void deleteAudioBlob(idea.audioId);
+    setNotice("Idea removed.");
+  }
+  function moveIdeaToPlan(idea: Idea, date: string) {
+    setPlanningIdeaId(idea.id);
+    setEditingBlock({
+      id: "",
+      date,
+      start: "09:00",
+      end: "09:30",
+      title: idea.text,
+      status: "planned",
+    });
+  }
   function beginTimer(block: Block) {
     setFocusBlock(block);
     setTimerBlock(block);
@@ -469,8 +617,16 @@ export default function Home() {
       blocks: isExisting
         ? d.blocks.map((x) => (x.id === id ? b : x))
         : [...d.blocks, b],
+      ideas: planningIdeaId
+        ? (d.ideas || []).map((idea) =>
+            idea.id === planningIdeaId
+              ? { ...idea, status: "planned", plannedDate: b.date }
+              : idea,
+          )
+        : d.ideas,
     }));
     setEditingBlock(null);
+    setPlanningIdeaId(null);
     setNotice(isExisting ? "Plan block updated." : "Block added to your plan.");
   }
   const deleteBlock = () => {
@@ -491,11 +647,12 @@ export default function Home() {
   const nav = [
     ["dashboard", "⌂", "Overview"],
     ["planner", "◷", "Planner"],
+    ["ideas", "✦", "Ideas"],
     ["experiments", "◌", "Experiments"],
     ["archive", "□", "Archive"],
     ["week", "↗", "Weekly"],
   ] as const;
-  const mobileNav = nav.filter(([id]) => id !== "archive");
+  const mobileNav = nav.filter(([id]) => id !== "archive" && id !== "ideas");
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -543,6 +700,7 @@ export default function Home() {
       <section className="content">
         {page === "dashboard" && <Dashboard />}
         {page === "planner" && <Planner />}
+        {page === "ideas" && <Ideas />}
         {page === "achievements" && <Achievements />}
         {page === "experiments" && <Experiments archived={false} />}
         {page === "archive" && <Experiments archived />}
@@ -782,8 +940,19 @@ export default function Home() {
         </Modal>
       )}
       {editingBlock && (
-        <Modal title="Plan block" onClose={() => setEditingBlock(null)}>
+        <Modal
+          title="Plan block"
+          onClose={() => {
+            setEditingBlock(null);
+            setPlanningIdeaId(null);
+          }}
+        >
           <form onSubmit={saveBlock} className="form-grid">
+            {planningIdeaId && (
+              <p className="idea-plan-note">
+                This idea stays untouched until you save its date and time.
+              </p>
+            )}
             <label>
               Title
               <input
@@ -837,13 +1006,15 @@ export default function Home() {
               </select>
             </label>
             <button className="button primary full">Save block</button>
-            <button
-              className="text-button danger full"
-              type="button"
-              onClick={deleteBlock}
-            >
-              Remove block
-            </button>
+            {editingBlock.id && (
+              <button
+                className="text-button danger full"
+                type="button"
+                onClick={deleteBlock}
+              >
+                Remove block
+              </button>
+            )}
           </form>
         </Modal>
       )}
@@ -1097,6 +1268,180 @@ export default function Home() {
       </>
     );
   }
+  function Ideas() {
+    const inboxIdeas = (data.ideas || []).filter(
+      (idea) => idea.status === "inbox",
+    );
+    const plannedIdeas = (data.ideas || []).filter(
+      (idea) => idea.status === "planned",
+    );
+    const recordedTime = `${String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:${String(recordingSeconds % 60).padStart(2, "0")}`;
+    const ideaDate = (value: string) =>
+      new Intl.DateTimeFormat("en-GB", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(value));
+    return (
+      <>
+        <header className="page-head ideas-head">
+          <div>
+            <p className="eyebrow">Capture now · decide later</p>
+            <h1>Ideas inbox.</h1>
+          </div>
+          <button className="button quiet" onClick={() => go("planner")}>
+            ← Back to planner
+          </button>
+        </header>
+        <section className="idea-capture-grid">
+          <article className="panel idea-capture-card">
+            <div>
+              <span className="idea-capture-icon">✦</span>
+              <div>
+                <p className="eyebrow">Quick thought</p>
+                <h2>Type it before it disappears.</h2>
+              </div>
+            </div>
+            <form onSubmit={saveIdea}>
+              <textarea
+                name="idea"
+                aria-label="New idea"
+                placeholder="Write an idea, reminder, opportunity, or task…"
+                required
+              />
+              <button className="button primary">Save idea</button>
+            </form>
+            <small>No date, time, or category needed.</small>
+          </article>
+          <article
+            className={`panel voice-capture-card${recording ? " recording" : ""}`}
+          >
+            <div className="voice-orb">
+              <span />
+              <i />
+            </div>
+            <p className="eyebrow">Voice note</p>
+            <h2>{recording ? "Listening…" : "Talk the idea out."}</h2>
+            <strong>{recordedTime}</strong>
+            <button
+              className={`button ${recording ? "stop-button" : "quiet"}`}
+              onClick={recording ? stopVoiceRecording : startVoiceRecording}
+            >
+              {recording ? (
+                <>
+                  <span className="stop-square" /> Stop &amp; save
+                </>
+              ) : (
+                <>
+                  <span className="record-dot" /> Record idea
+                </>
+              )}
+            </button>
+            <small>Stored only on this device · 2 minute maximum</small>
+          </article>
+        </section>
+        <section className="ideas-section">
+          <div className="ideas-section-head">
+            <div>
+              <p className="eyebrow">Waiting for you</p>
+              <h2>Idea inbox</h2>
+            </div>
+            <span>{inboxIdeas.length} unscheduled</span>
+          </div>
+          {inboxIdeas.length ? (
+            <div className="idea-board">
+              {inboxIdeas.map((idea, index) => (
+                <article className="idea-note" key={idea.id}>
+                  <span className="idea-note-fold" />
+                  <div className="idea-note-top">
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <small>
+                      {idea.audioId ? "Voice idea" : ideaDate(idea.createdAt)}
+                    </small>
+                  </div>
+                  <h3>{idea.text}</h3>
+                  {idea.audioId && <AudioNote audioId={idea.audioId} />}
+                  <div className="idea-schedule">
+                    <small>Move when ready</small>
+                    <div>
+                      <button onClick={() => moveIdeaToPlan(idea, today)}>
+                        Today
+                      </button>
+                      <button onClick={() => moveIdeaToPlan(idea, day(1))}>
+                        Tomorrow
+                      </button>
+                      <button onClick={() => moveIdeaToPlan(idea, day(2))}>
+                        Day after
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    className="idea-delete"
+                    onClick={() => removeIdea(idea)}
+                  >
+                    Remove
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="panel ideas-empty">
+              <span>✦</span>
+              <h3>A clear mind and an empty inbox.</h3>
+              <p>
+                Your next thought can wait here without becoming a commitment.
+              </p>
+            </div>
+          )}
+        </section>
+        {plannedIdeas.length > 0 && (
+          <section className="ideas-section moved-ideas">
+            <div className="ideas-section-head">
+              <div>
+                <p className="eyebrow">Moved from the inbox</p>
+                <h2>Recently planned</h2>
+              </div>
+            </div>
+            <div className="moved-idea-list">
+              {plannedIdeas.map((idea) => (
+                <article className="panel" key={idea.id}>
+                  <div>
+                    <strong>{idea.text}</strong>
+                    <span>
+                      Planned for{" "}
+                      {idea.plannedDate
+                        ? prettyDate(idea.plannedDate)
+                        : "a future day"}
+                    </span>
+                  </div>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      updateData((d) => ({
+                        ...d,
+                        ideas: (d.ideas || []).map((item) =>
+                          item.id === idea.id
+                            ? {
+                                ...item,
+                                status: "inbox",
+                                plannedDate: undefined,
+                              }
+                            : item,
+                        ),
+                      }))
+                    }
+                  >
+                    Return to inbox
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+      </>
+    );
+  }
   function Planner() {
     const blocks = data.blocks
       .filter((b) => b.date === plannerDate)
@@ -1116,21 +1461,26 @@ export default function Home() {
                   : "Plan the day."}
             </h1>
           </div>
-          <button
-            className="button primary"
-            onClick={() =>
-              setEditingBlock({
-                id: "",
-                date: plannerDate,
-                start: "09:00",
-                end: "09:30",
-                title: "",
-                status: "planned",
-              })
-            }
-          >
-            + Add block
-          </button>
+          <div className="header-actions planner-actions">
+            <button className="button quiet" onClick={() => go("ideas")}>
+              ✦ Ideas inbox
+            </button>
+            <button
+              className="button primary"
+              onClick={() =>
+                setEditingBlock({
+                  id: "",
+                  date: plannerDate,
+                  start: "09:00",
+                  end: "09:30",
+                  title: "",
+                  status: "planned",
+                })
+              }
+            >
+              + Add block
+            </button>
+          </div>
         </header>
         <section className="planner-toolbar">
           <button
@@ -1689,6 +2039,34 @@ export default function Home() {
       </Modal>
     );
   }
+}
+
+function AudioNote({ audioId }: { audioId: string }) {
+  const [source, setSource] = useState("");
+  useEffect(() => {
+    let objectUrl = "";
+    let cancelled = false;
+    void getAudioBlob(audioId)
+      .then((blob) => {
+        if (!blob || cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSource(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setSource("");
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [audioId]);
+  return source ? (
+    <audio className="idea-audio" controls preload="metadata" src={source}>
+      Audio playback is not supported in this browser.
+    </audio>
+  ) : (
+    <span className="audio-loading">Loading recording…</span>
+  );
 }
 
 function Progress({ value }: { value: number }) {
