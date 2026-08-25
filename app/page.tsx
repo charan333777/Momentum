@@ -272,7 +272,12 @@ export default function Home() {
   const [data, setData] = useState<Data>(demoData);
   const [hydrated, setHydrated] = useState(false);
   const [page, setPage] = useState<
-    "dashboard" | "planner" | "experiments" | "archive" | "week"
+    | "dashboard"
+    | "planner"
+    | "achievements"
+    | "experiments"
+    | "archive"
+    | "week"
   >("dashboard");
   const [plannerDate, setPlannerDate] = useState(todayISO());
   const [modal, setModal] = useState<
@@ -315,6 +320,7 @@ export default function Home() {
   const archivedExperiments = data.experiments.filter(
     (e) => e.status !== "active",
   );
+  const achievements = data.experiments.filter((e) => e.achievement.trim());
   const todayBlocks = data.blocks
     .filter((b) => b.date === today)
     .sort((a, b) => a.start.localeCompare(b.start));
@@ -334,13 +340,6 @@ export default function Home() {
     (sum, b) => sum + minutes(b.start, b.end),
     0,
   );
-  const actualToday = todayBlocks.reduce(
-    (sum, b) => sum + (b.actualMinutes || 0),
-    0,
-  );
-  const currentBlock =
-    todayBlocks.find((b) => b.status === "active") ||
-    todayBlocks.find((b) => b.status === "planned");
   const formatTime = (secs: number) =>
     `${String(Math.floor(secs / 3600)).padStart(2, "0")}:${String(Math.floor(secs / 60) % 60).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
   const experimentFor = (id?: string) =>
@@ -544,6 +543,7 @@ export default function Home() {
       <section className="content">
         {page === "dashboard" && <Dashboard />}
         {page === "planner" && <Planner />}
+        {page === "achievements" && <Achievements />}
         {page === "experiments" && <Experiments archived={false} />}
         {page === "archive" && <Experiments archived />}
         {page === "week" && <Weekly />}
@@ -851,77 +851,61 @@ export default function Home() {
     </main>
   );
   function Dashboard() {
+    const completedToday = todayBlocks.filter(
+      (block) => block.status === "completed",
+    ).length;
+    const latestAchievement = achievements[0];
     return (
       <>
-        <header className="page-head">
+        <header className="page-head home-heading">
           <div>
-            <p className="eyebrow">{prettyDate(today)}</p>
-            <h1>Move the important things.</h1>
-          </div>
-          <div className="header-actions">
-            <button
-              className="button quiet"
-              onClick={() => {
-                go("planner");
-                setPlannerDate(day(1));
-              }}
-            >
-              Plan tomorrow
-            </button>
-            <button
-              className="button primary"
-              onClick={() => {
-                setEditingExperiment(null);
-                setModal("experiment");
-              }}
-            >
-              + Experiment
-            </button>
+            <p className="eyebrow">{hydrated ? prettyDate(today) : "Today"}</p>
+            <h1>Your day, clearly.</h1>
           </div>
         </header>
-        <section className="hero">
-          <img
-            src="./momentum-hero.png"
-            alt="A quiet early-morning workspace"
-          />
-          <div className="hero-shade" />
-          <div className="hero-content">
-            <p className="eyebrow">Nine-month stability sprint</p>
-            <div className="count">
-              <strong>{daysLeft}</strong>
-              <span>
-                days
-                <br />
-                remaining
-              </span>
+        <section className="home-top-grid">
+          <article className="hero home-time-card">
+            <img
+              src="./momentum-hero.png"
+              alt="A quiet early-morning workspace"
+            />
+            <div className="hero-shade" />
+            <div className="hero-content">
+              <p className="eyebrow">Time remaining</p>
+              <div className="count">
+                <strong>{hydrated ? daysLeft : "—"}</strong>
+                <span>
+                  days
+                  <br />
+                  left
+                </span>
+              </div>
+              <div className="hero-meta">
+                <span>
+                  Until{" "}
+                  {new Intl.DateTimeFormat("en-GB", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  }).format(new Date(`${data.endDate}T12:00:00`))}
+                </span>
+                <button
+                  className="ghost-link"
+                  onClick={() => setModal("settings")}
+                >
+                  Adjust →
+                </button>
+              </div>
             </div>
-            <div className="hero-meta">
-              <span>
-                Target:{" "}
-                {new Intl.DateTimeFormat("en-GB", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                }).format(new Date(`${data.endDate}T12:00:00`))}
-              </span>
-              <button
-                className="ghost-link"
-                onClick={() => setModal("settings")}
-              >
-                Adjust sprint →
-              </button>
-            </div>
-          </div>
-        </section>
-        <section className="metric-grid">
-          <article className="panel money-panel">
+          </article>
+          <article className="panel money-panel home-target-card">
             <div className="panel-label">
-              <span>Income progress</span>
+              <span>Money target</span>
               <button
                 className="text-button"
                 onClick={() => setModal("income")}
               >
-                + Log income
+                Log income +
               </button>
             </div>
             <div className="money-numbers">
@@ -935,130 +919,181 @@ export default function Home() {
                 {money(Math.max(0, data.incomeTarget - earned))} remaining
               </span>
             </div>
-          </article>
-          <article className="panel focus-panel">
-            <div className="panel-label">
-              <span>Today&apos;s focus</span>
-              <span className="status-dot">
-                {timerBlock ? "Timer running" : "Ready"}
-              </span>
+            <div className="target-caption">
+              <span>{data.income.length} income entries</span>
+              <button onClick={() => setModal("settings")}>Edit target</button>
             </div>
-            {currentBlock ? (
-              <>
-                <h3>{currentBlock.title}</h3>
-                <p>
-                  {currentBlock.start} – {currentBlock.end} ·{" "}
-                  {experimentFor(currentBlock.experimentId)?.name ||
-                    "Personal focus"}
-                </p>
-                <button
-                  className="button primary full-mobile"
-                  onClick={() => {
-                    if (timerBlock?.id === currentBlock.id) {
-                      setFocusBlock(currentBlock);
-                    } else {
-                      beginTimer(currentBlock);
-                    }
-                  }}
-                >
-                  {timerBlock?.id === currentBlock.id
-                    ? timerRunning
-                      ? "Open focus session"
-                      : "Resume focus session"
-                    : "Start current block"}{" "}
-                  <span>→</span>
-                </button>
-              </>
-            ) : (
-              <Empty
-                icon="○"
-                title="A little space to choose"
-                copy="Add one meaningful block to today."
-                action="Plan today"
-                onClick={() => go("planner")}
-              />
-            )}
           </article>
         </section>
-        <section className="dashboard-grid">
-          <article className="panel timeline-card">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Today&apos;s plan</p>
-                <h2>Keep it visible.</h2>
+        <section className="home-folder-grid">
+          <button
+            className="home-folder today-folder"
+            onClick={() => {
+              setPlannerDate(today);
+              go("planner");
+            }}
+          >
+            <span className="folder-topline">
+              <span className="folder-icon">
+                <StaticIcon name="calendar-days" size={20} />
+              </span>
+              <span className="folder-count">
+                {completedToday}/{todayBlocks.length} done
+              </span>
+            </span>
+            <span className="folder-heading">
+              <span>
+                <small>Today&apos;s plan</small>
+                <strong>See everything for today.</strong>
+              </span>
+              <b aria-hidden="true">→</b>
+            </span>
+            <span className="folder-preview-list">
+              {todayBlocks.slice(0, 3).map((block) => (
+                <span key={block.id}>
+                  <time>{block.start}</time>
+                  <span>{block.title}</span>
+                  <i className={block.status} />
+                </span>
+              ))}
+              {!todayBlocks.length && (
+                <span className="folder-empty">No tasks planned yet.</span>
+              )}
+            </span>
+            <span className="folder-footer">
+              <span>{Math.round(plannedToday / 6) / 10} planned hours</span>
+              <span>Open today&apos;s page</span>
+            </span>
+          </button>
+          <button
+            className="home-folder achievement-folder"
+            onClick={() => go("achievements")}
+          >
+            <img src="./momentum-hero.png" alt="" />
+            <span className="achievement-shade" />
+            <span className="achievement-folder-content">
+              <span className="folder-topline">
+                <span className="folder-icon achievement-icon">★</span>
+                <span className="folder-count">
+                  {achievements.length} wins saved
+                </span>
+              </span>
+              <span className="folder-heading">
+                <span>
+                  <small>Achievements</small>
+                  <strong>Notice how far you&apos;ve come.</strong>
+                </span>
+                <b aria-hidden="true">→</b>
+              </span>
+              {latestAchievement ? (
+                <span className="achievement-preview">
+                  <small>Latest highlight</small>
+                  <strong>{latestAchievement.achievement}</strong>
+                  <span>{latestAchievement.name}</span>
+                </span>
+              ) : (
+                <span className="achievement-preview">
+                  <strong>Your first win belongs here.</strong>
+                </span>
+              )}
+              <span className="folder-footer">
+                <span>
+                  {data.experiments.reduce(
+                    (total, experiment) => total + experiment.milestones,
+                    0,
+                  )}{" "}
+                  milestones
+                </span>
+                <span>View all achievements</span>
+              </span>
+            </span>
+          </button>
+        </section>
+      </>
+    );
+  }
+  function Achievements() {
+    const totalMilestones = data.experiments.reduce(
+      (sum, experiment) => sum + experiment.milestones,
+      0,
+    );
+    const completedExperiments = data.experiments.filter(
+      (experiment) => experiment.status === "completed",
+    ).length;
+    return (
+      <>
+        <header className="page-head achievements-head">
+          <div>
+            <p className="eyebrow">Your progress history</p>
+            <h1>Achievements</h1>
+          </div>
+          <button className="button quiet" onClick={() => go("dashboard")}>
+            ← Back home
+          </button>
+        </header>
+        <section className="achievement-hero">
+          <img src="./momentum-hero.png" alt="A calm workspace at sunrise" />
+          <div className="achievement-hero-shade" />
+          <div>
+            <p className="eyebrow">Evidence of momentum</p>
+            <h2>Small wins become a better life.</h2>
+            <p>Every result stays here—even when an experiment changes.</p>
+          </div>
+        </section>
+        <section className="achievement-stats">
+          <article className="panel">
+            <span>Wins recorded</span>
+            <strong>{achievements.length}</strong>
+          </article>
+          <article className="panel">
+            <span>Milestones reached</span>
+            <strong>{totalMilestones}</strong>
+          </article>
+          <article className="panel">
+            <span>Experiments completed</span>
+            <strong>{completedExperiments}</strong>
+          </article>
+        </section>
+        <section className="achievement-list">
+          {achievements.map((experiment, index) => (
+            <article className="achievement-card panel" key={experiment.id}>
+              <span className="achievement-number">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <div className="achievement-card-copy">
+                <span className="category">{experiment.category}</span>
+                <h2>{experiment.achievement}</h2>
+                <p>{experiment.name}</p>
+                <div className="achievement-details">
+                  <span>{experiment.milestones} milestones</span>
+                  <span>{experiment.hours} tracked hours</span>
+                  <span>{experiment.progress}% progress</span>
+                </div>
+                {experiment.lessons && (
+                  <blockquote>{experiment.lessons}</blockquote>
+                )}
               </div>
-              <button className="text-button" onClick={() => go("planner")}>
-                Edit timeline →
+              <button
+                className="button quiet"
+                onClick={() => {
+                  setEditingExperiment(experiment);
+                  setModal("experiment");
+                }}
+              >
+                Open experiment
               </button>
-            </div>
-            <Timeline
-              blocks={todayBlocks}
-              compact
-              onEdit={(b) => {
-                setPlannerDate(today);
-                setEditingBlock(b);
-              }}
-              onOpen={setFocusBlock}
-              onStart={beginTimer}
-            />
-          </article>
-          <article className="panel visual-card">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Time, today</p>
-                <h2>Plan versus actual</h2>
-              </div>
-              <span className="subtle">hours</span>
-            </div>
-            <HoursVisual planned={plannedToday} actual={actualToday} />
-            <div className="legend">
-              <span>
-                <i className="planned" /> Planned{" "}
-                {Math.round(plannedToday / 6) / 10}h
-              </span>
-              <span>
-                <i className="actual" /> Actual{" "}
-                {Math.round(actualToday / 6) / 10}h
-              </span>
-            </div>
-          </article>
+            </article>
+          ))}
         </section>
-        <section className="panel experiments-home">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Active experiments</p>
-              <h2>Small bets, made visible.</h2>
-            </div>
-            <button className="text-button" onClick={() => go("experiments")}>
-              See all →
-            </button>
-          </div>
-          <div className="experiment-strip">
-            {activeExperiments.map((exp) => (
-              <div className="experiment-mini" key={exp.id}>
-                <div>
-                  <span className="category">{exp.category}</span>
-                  <button
-                    className="inline-title"
-                    onClick={() => {
-                      setEditingExperiment(exp);
-                      setModal("experiment");
-                    }}
-                  >
-                    {exp.name}
-                  </button>
-                </div>
-                <div className="mini-progress">
-                  <Progress value={exp.progress} />
-                  <span>{exp.progress}%</span>
-                </div>
-                <small>
-                  {exp.hours} hours invested · {exp.milestones} milestones
-                </small>
-              </div>
-            ))}
-          </div>
-        </section>
+        {!achievements.length && (
+          <Empty
+            icon="★"
+            title="Your first win belongs here"
+            copy="Add an achievement to any experiment and it will appear automatically."
+            action="Open experiments"
+            onClick={() => go("experiments")}
+          />
+        )}
       </>
     );
   }
@@ -1073,7 +1108,13 @@ export default function Home() {
             <p className="eyebrow">
               Daily planner · {data.interval}-minute rhythm
             </p>
-            <h1>Make room for tomorrow.</h1>
+            <h1>
+              {plannerDate === today
+                ? "Today’s plan."
+                : plannerDate === day(1)
+                  ? "Plan tomorrow."
+                  : "Plan the day."}
+            </h1>
           </div>
           <button
             className="button primary"
