@@ -1106,7 +1106,7 @@ export default function Home() {
         <header className="page-head">
           <div>
             <p className="eyebrow">
-              Daily planner · {data.interval}-minute rhythm
+              Daily planner · {data.interval}-minute blocks
             </p>
             <h1>
               {plannerDate === today
@@ -1164,9 +1164,7 @@ export default function Home() {
             <div>
               <p className="eyebrow">Original plan stays intact</p>
               <h2>
-                {plannerDate === today
-                  ? "Today’s timeline"
-                  : "Your planned day"}
+                {plannerDate === today ? "Today’s board" : "Your day board"}
               </h2>
             </div>
           </div>
@@ -1558,42 +1556,30 @@ export default function Home() {
   }
   function Timeline({
     blocks,
-    compact = false,
     onEdit,
     onOpen,
     onStart,
   }: {
     blocks: Block[];
-    compact?: boolean;
     onEdit: (b: Block) => void;
     onOpen: (b: Block) => void;
     onStart: (b: Block) => void;
   }) {
     return (
-      <div className={compact ? "task-stack compact" : "task-stack"}>
-        {blocks.map((b) => {
+      <div className="sticky-board">
+        {blocks.map((b, index) => {
           const exp = experimentFor(b.experimentId);
           const overdue = isBlockOverdue(b, today);
           return (
             <article
-              className={`task-card ${b.status}${overdue ? " overdue" : ""}`}
+              className={`sticky-note ${b.status}${overdue ? " overdue" : ""}`}
               key={b.id}
             >
-              <button className="task-card-main" onClick={() => onOpen(b)}>
-                <span className="task-time">
-                  <strong>{b.start}</strong>
-                  <i />
-                  <span>{b.end}</span>
+              <span className="note-fold" />
+              <div className="note-topline">
+                <span className="note-number">
+                  {String(index + 1).padStart(2, "0")}
                 </span>
-                <span className="task-copy">
-                  <small>{exp?.category || "Personal focus"}</small>
-                  <strong>{b.title}</strong>
-                  <span>
-                    {exp?.name || "Personal"} · {minutes(b.start, b.end)} min
-                  </span>
-                </span>
-              </button>
-              <div className="task-card-end">
                 <span className={`block-status ${b.status}`}>
                   {overdue
                     ? "Overdue"
@@ -1609,8 +1595,25 @@ export default function Home() {
                               ? "In progress"
                               : "Planned"}
                 </span>
+              </div>
+              <button className="note-main" onClick={() => onOpen(b)}>
+                <span className="note-category">
+                  {exp?.category || "Personal focus"}
+                </span>
+                <strong>{b.title}</strong>
+                <span className="note-experiment">
+                  {exp?.name || "Personal"}
+                </span>
+                <span className="note-time-row">
+                  <span>
+                    {b.start} — {b.end}
+                  </span>
+                  <span>{minutes(b.start, b.end)} min</span>
+                </span>
+              </button>
+              <div className="note-actions">
                 <button
-                  className="task-edit"
+                  className="note-edit"
                   onClick={() => onEdit(b)}
                   aria-label={`Edit ${b.title}`}
                 >
@@ -1618,7 +1621,7 @@ export default function Home() {
                 </button>
                 {b.status === "planned" || b.status === "active" ? (
                   <button
-                    className="play-button"
+                    className="note-start"
                     onClick={() =>
                       timerBlock?.id === b.id ? onOpen(b) : onStart(b)
                     }
@@ -1631,10 +1634,17 @@ export default function Home() {
                     {timerBlock?.id === b.id ? (
                       <span className="timer-indicator" />
                     ) : (
-                      <StaticIcon name="play" size={12} />
+                      <StaticIcon name="play" size={13} />
                     )}
+                    <span>
+                      {timerBlock?.id === b.id ? "Open focus" : "Start focus"}
+                    </span>
                   </button>
-                ) : null}
+                ) : (
+                  <button className="note-open" onClick={() => onOpen(b)}>
+                    View result →
+                  </button>
+                )}
               </div>
             </article>
           );
